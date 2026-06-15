@@ -28,12 +28,21 @@ for the full design.
 
 | Layer | Choice |
 |-------|--------|
-| Canonical store | SQLite (`inventory.db`) + `sqlite-vec` for embeddings |
+| Canonical store | SQLite (`inventory.db`); attribute-based dedup |
 | Agent-readable exports | generated, committed `exports/inventory.{md,csv}` |
-| Vision (local, via Ollama) | `minicpm5` (stream/HUD), `gemma4:12b` (recognize) |
+| Vision (local, via Ollama) | `gemma3:4b` (stream/HUD), `gemma4:12b` (recognize) |
 | App | FastAPI backend + browser frontend (webcam, HUD, Web Speech, text input) |
 | Package manager | uv |
 
+## Run
+
+```bash
+uv run uvicorn app.server:app --reload   # http://localhost:8000
+```
+
+Needs a local Ollama with `gemma3:4b` and `gemma4:12b` pulled.
+
 ## Status
 
-Scaffolding. Design locked (ADR-001); implementation not yet started.
+Data layer + vision/web app implemented and tested (19 tests). Vision verified
+live against Ollama. Not yet driven with real inventory.

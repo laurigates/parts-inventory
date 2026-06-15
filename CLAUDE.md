@@ -24,10 +24,10 @@ Full design: [docs/decisions/ADR-001-architecture.md](docs/decisions/ADR-001-arc
 | Layer | Choice |
 |-------|--------|
 | Canonical store | SQLite (`inventory.db`) — write-heavy small mutations |
-| Embeddings | `sqlite-vec` extension (dedup / similarity) |
+| Dedup | attribute-based (primary); `sqlite-vec` ready but unused |
 | Agent-readable exports | generated, committed `exports/inventory.{md,csv}` |
-| Vision (local, Ollama) | `minicpm5` (stream/HUD), `gemma4:12b` (recognize) |
-| App | FastAPI backend + browser frontend |
+| Vision (local, Ollama) | `gemma3:4b` (stream/HUD), `gemma4:12b` (recognize) |
+| App | FastAPI backend (`app/server.py`) + static frontend (`app/static/`) |
 | Package manager | uv |
 | Lint/format | ruff |
 | Type checker | ty |
@@ -56,10 +56,22 @@ parts-inventory/
   then regenerate.
 - **uv** for everything Python: `uv run pytest`, `uv run ruff check`.
 
-## Build order (current)
+## Running the app
 
-1. **Data layer** (in progress) — SQLite schema, models, export generator.
-   Testable without a camera.
-2. Vision pipeline + web app on top.
+```bash
+uv run uvicorn app.server:app --reload   # then open http://localhost:8000
+uv run parts-inventory export            # regenerate exports/ from the DB
+```
+
+Requires a local Ollama (`http://localhost:11434`) with `gemma3:4b` and
+`gemma4:12b` pulled. Embeddings need the server started with `--embeddings`
+(currently not enabled) — until then dedup is attribute-based, which is fine.
+
+## Build order
+
+1. **Data layer** (done) — SQLite schema, models, export generator, dedup.
+2. **Vision pipeline + web app** (done) — Ollama client (gemma3 stream /
+   gemma4 recognize), FastAPI endpoints, webcam HUD frontend with defer pile.
 3. (Later) MCP query server; cloud fine-print escalation; standardized
-   "product photo" images.
+   "product photo" images; editing deferred-item fields (v1 confirms status
+   only); enable `--embeddings` for visual dedup.

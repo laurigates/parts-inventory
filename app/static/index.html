@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>parts-inventory</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #111; color: #eee; }
+  header { padding: .5rem 1rem; display: flex; gap: 1rem; align-items: center; }
+  header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+  main { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; padding: 1rem; }
+  .stage { position: relative; }
+  video, canvas#snap { width: 100%; border-radius: 8px; background: #000; }
+  #hud { position: absolute; left: 0; right: 0; bottom: 0; padding: .5rem .75rem;
+         background: linear-gradient(transparent, rgba(0,0,0,.8)); font-size: 1.1rem; }
+  #hud .conf { float: right; opacity: .8; font-variant-numeric: tabular-nums; }
+  #bbox { position: absolute; border: 2px solid #2fa; border-radius: 4px;
+          box-shadow: 0 0 0 9999px rgba(0,0,0,.35); pointer-events: none;
+          transition: all .15s ease; display: none; }
+  #bbox::after { content: attr(data-label); position: absolute; top: -1.4em; left: 0;
+          background: #2fa; color: #042; font-size: .75rem; padding: 0 .3rem;
+          border-radius: 3px; white-space: nowrap; }
+  .controls { display: flex; gap: .5rem; margin-top: .5rem; flex-wrap: wrap; }
+  button { background: #2a6; color: #fff; border: 0; padding: .5rem .9rem;
+           border-radius: 6px; font-size: .9rem; cursor: pointer; }
+  button.secondary { background: #345; }
+  button:disabled { opacity: .5; cursor: default; }
+  aside { background: #1a1a1a; border-radius: 8px; padding: .75rem; }
+  aside h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em;
+             opacity: .6; margin: .25rem 0 .5rem; }
+  label { display: block; font-size: .75rem; opacity: .7; margin: .4rem 0 .1rem; }
+  input, textarea, select { width: 100%; box-sizing: border-box; background: #222;
+           border: 1px solid #333; color: #eee; border-radius: 4px; padding: .35rem; }
+  .pile-item { font-size: .85rem; padding: .35rem; border-bottom: 1px solid #222;
+               cursor: pointer; }
+  .pile-item:hover { background: #222; }
+  .dup { color: #fb6; font-size: .85rem; margin: .4rem 0; }
+  .muted { opacity: .6; font-size: .8rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>parts-inventory</h1>
+  <span id="status" class="muted">starting camera…</span>
+  <button id="exportBtn" class="secondary" style="margin-left:auto">Regenerate exports</button>
+</header>
+<main>
+  <section>
+    <div class="stage">
+      <video id="cam" autoplay playsinline muted></video>
+      <canvas id="snap" hidden></canvas>
+      <div id="bbox"></div>
+      <div id="hud">— <span class="conf"></span></div>
+    </div>
+    <div class="controls">
+      <button id="recognizeBtn">Identify item</button>
+      <label style="display:flex;align-items:center;gap:.35rem;font-size:.85rem">
+        <input type="checkbox" id="hudToggle" checked style="width:auto" /> live HUD
+      </label>
+      <label style="display:flex;align-items:center;gap:.35rem;font-size:.85rem">
+        <input type="checkbox" id="speakToggle" checked style="width:auto" /> speak prompts
+      </label>
+    </div>
+    <div id="dupBox"></div>
+  </section>
+
+  <aside>
+    <h2>Current item</h2>
+    <form id="itemForm">
+      <label>Name</label><input name="name" id="f_name" required />
+      <label>Kind</label>
+      <select name="kind" id="f_kind">
+        <option value="component">component</option>
+        <option value="tool">tool</option>
+      </select>
+      <label>Category</label><input name="category" id="f_category" />
+      <label>Attributes (JSON)</label>
+      <textarea name="attributes_json" id="f_attrs" rows="3">{}</textarea>
+      <label>Quantity</label><input name="quantity" id="f_qty" type="number" value="1" />
+      <div class="controls">
+        <button type="submit">Save</button>
+        <button type="button" id="deferBtn" class="secondary">Defer to pile</button>
+      </div>
+      <p id="formConf" class="muted"></p>
+    </form>
+
+    <h2>Deferred pile (<span id="pileCount">0</span>)</h2>
+    <div id="pile"></div>
+  </aside>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const cam = $("cam"), snap = $("snap");
+let lastFrame = null;        // Blob of the last identified frame, for saving
+let currentRecognition = null;
+
+function setStatus(t) { $("status").textContent = t; }
+
+function drawBbox(bbox, label) {
+  const box = $("bbox");
+  if (!bbox || bbox.length !== 4) { box.style.display = "none"; return; }
+  const [x, y, w, h] = bbox;  // fractional, relative to the video frame
+  box.style.left = (cam.offsetLeft + x * cam.clientWidth) + "px";
+  box.style.top = (cam.offsetTop + y * cam.clientHeight) + "px";
+  box.style.width = (w * cam.clientWidth) + "px";
+  box.style.height = (h * cam.clientHeight) + "px";
+  box.setAttribute("data-label", label || "");
+  box.style.display = "block";
+}
+function speak(text) {
+  if (!$("speakToggle").checked || !text || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+}
+
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 1280, height: 720, facingMode: "environment" } });
+    cam.srcObject = stream;
+    await cam.play();
+    setStatus("camera ready");
+    hudLoop();
+  } catch (e) { setStatus("camera error: " + e.message); }
+}
+
+function grabFrame() {
+  const w = cam.videoWidth, h = cam.videoHeight;
+  if (!w) return null;
+  snap.width = w; snap.height = h;
+  snap.getContext("2d").drawImage(cam, 0, 0, w, h);
+  return new Promise((res) => snap.toBlob(res, "image/jpeg", 0.85));
+}
+
+async function post(path, blob, field = "frame") {
+  const fd = new FormData();
+  fd.append(field, blob, "frame.jpg");
+  const r = await fetch(path, { method: "POST", body: fd });
+  return r.json();
+}
+
+// --- live HUD loop (fast model) -----------------------------------------
+let hudBusy = false;
+async function hudLoop() {
+  if ($("hudToggle").checked && !hudBusy) {
+    hudBusy = true;
+    try {
+      const blob = await grabFrame();
+      if (blob) {
+        const { label } = await post("/api/stream", blob);
+        $("hud").firstChild.textContent = label || "—";
+      }
+    } catch {} finally { hudBusy = false; }
+  }
+  setTimeout(hudLoop, 1500);
+}
+
+// --- identify (strong model) --------------------------------------------
+$("recognizeBtn").onclick = async () => {
+  setStatus("identifying…");
+  $("recognizeBtn").disabled = true;
+  try {
+    lastFrame = await grabFrame();
+    const { recognition, duplicates } = await post("/api/recognize", lastFrame);
+    currentRecognition = recognition;
+    $("f_name").value = recognition.name;
+    $("f_kind").value = recognition.kind === "tool" ? "tool" : "component";
+    $("f_category").value = recognition.category || "";
+    $("f_attrs").value = JSON.stringify(recognition.attributes || {}, null, 0);
+    $("f_qty").value = 1;
+    $("hud .conf") && ($("hud").querySelector(".conf").textContent =
+      Math.round((recognition.confidence || 0) * 100) + "%");
+    $("formConf").textContent =
+      "confidence " + Math.round((recognition.confidence || 0) * 100) + "%";
+    drawBbox(recognition.bbox, recognition.name);
+
+    const dupBox = $("dupBox");
+    dupBox.innerHTML = "";
+    if (duplicates.length) {
+      dupBox.innerHTML = `<div class="dup">Looks already in inventory: ` +
+        duplicates.map(d => `#${d.id} ${d.name} (qty ${d.quantity})`).join(", ") +
+        ` — save anyway to add another.</div>`;
+      speak("This looks like it is already in the inventory.");
+    }
+    if (recognition.needs_closer_look) {
+      speak(recognition.prompt_for_user || "Show me a closer view.");
+      setStatus("needs closer look: " + (recognition.prompt_for_user || ""));
+    } else {
+      setStatus("identified — review and save");
+    }
+  } catch (e) { setStatus("identify error: " + e.message); }
+  finally { $("recognizeBtn").disabled = false; }
+};
+
+// --- save / defer --------------------------------------------------------
+async function submitItem(status) {
+  const fd = new FormData();
+  fd.append("name", $("f_name").value);
+  fd.append("kind", $("f_kind").value);
+  fd.append("category", $("f_category").value);
+  fd.append("attributes_json", $("f_attrs").value || "{}");
+  fd.append("quantity", $("f_qty").value || "1");
+  fd.append("confidence", String(currentRecognition?.confidence ?? 1.0));
+  fd.append("status", status);
+  if (lastFrame) fd.append("image", lastFrame, "item.jpg");
+  const r = await fetch("/api/items", { method: "POST", body: fd });
+  const j = await r.json();
+  setStatus(status === "deferred" ? `deferred #${j.id}` : `saved #${j.id}`);
+  resetForm();
+  refreshPile();
+}
+
+$("itemForm").onsubmit = (e) => { e.preventDefault(); submitItem("confirmed"); };
+$("deferBtn").onclick = () => submitItem("deferred");
+
+function resetForm() {
+  $("itemForm").reset();
+  $("f_attrs").value = "{}";
+  $("dupBox").innerHTML = "";
+  drawBbox(null);
+  currentRecognition = null; lastFrame = null;
+}
+
+// --- deferred pile -------------------------------------------------------
+async function refreshPile() {
+  const items = await (await fetch("/api/items?status=deferred")).json();
+  $("pileCount").textContent = items.length;
+  $("pile").innerHTML = items.map(i =>
+    `<div class="pile-item" data-id="${i.id}">${i.name}
+       <span class="muted">${i.category || ""}</span></div>`).join("");
+  $("pile").querySelectorAll(".pile-item").forEach(el =>
+    el.onclick = () => loadDeferred(el.dataset.id, items));
+}
+
+function loadDeferred(id, items) {
+  const it = items.find(x => String(x.id) === String(id));
+  if (!it) return;
+  $("f_name").value = it.name; $("f_kind").value = it.kind;
+  $("f_category").value = it.category;
+  $("f_attrs").value = it.attributes || "{}";
+  $("f_qty").value = it.quantity;
+  setStatus(`editing deferred #${id} — Save confirms it`);
+  $("itemForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(); fd.append("status", "confirmed");
+    await fetch(`/api/items/${id}/status`, { method: "POST", body: fd });
+    // NOTE: v1 confirms status only; editing deferred fields lands in v1.1.
+    setStatus(`confirmed #${id}`); resetForm(); refreshPile();
+    $("itemForm").onsubmit = (ev) => { ev.preventDefault(); submitItem("confirmed"); };
+  };
+}
+
+$("exportBtn").onclick = async () => {
+  const { written } = await (await fetch("/api/export", { method: "POST" })).json();
+  setStatus(`exported ${written} items to exports/`);
+};
+
+startCamera();
+refreshPile();
+</script>
+</body>
+</html>

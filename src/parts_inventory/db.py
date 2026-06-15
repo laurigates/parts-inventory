@@ -127,6 +127,29 @@ class Inventory:
         for row in cur:
             yield Item.from_row(row)
 
+    def find_duplicates(self, item: Item) -> list[Item]:
+        """Attribute-based dedup: existing items of the same kind+category whose
+        identifying attributes match.
+
+        This is the primary dedup path (embeddings are optional infra). A 4.7k
+        resistor matches the existing 4.7k entry regardless of camera angle.
+        Matching is conservative: same kind, same category, and every attribute
+        the candidate carries must equal the stored value.
+        """
+        matches: list[Item] = []
+        for existing in self.all():
+            if existing.kind != item.kind:
+                continue
+            if existing.category != item.category:
+                continue
+            if item.attributes and all(
+                existing.attributes.get(k) == v for k, v in item.attributes.items()
+            ):
+                matches.append(existing)
+            elif not item.attributes and existing.name.lower() == item.name.lower():
+                matches.append(existing)
+        return matches
+
     def nearest(self, embedding: list[float], k: int = 3) -> list[tuple[int, float]]:
         """Return (item_id, distance) for the k nearest stored embeddings.
 
