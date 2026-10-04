@@ -1,6 +1,6 @@
 # ADR-001: Architecture
 
-Status: Accepted
+Status: Accepted (§1 exports and §4 phase 1 superseded by [ADR-002](ADR-002-data-outside-repo.md))
 Date: 2026-06-15
 
 ## Context

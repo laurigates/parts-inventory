@@ -20,19 +20,20 @@ from fastapi.staticfiles import StaticFiles
 from parts_inventory.db import Inventory
 from parts_inventory.export import write_exports
 from parts_inventory.models import Item, Kind, Status
+from parts_inventory.paths import data_dir
 from parts_inventory.vision import VisionClient
 
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "inventory.db"
-IMAGES_DIR = ROOT / "images"
-EXPORTS_DIR = ROOT / "exports"
+DATA_DIR = data_dir()
+DB_PATH = DATA_DIR / "inventory.db"
+IMAGES_DIR = DATA_DIR / "images"
+EXPORTS_DIR = DATA_DIR / "exports"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.vision = VisionClient()
-    IMAGES_DIR.mkdir(exist_ok=True)
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     yield
     await app.state.vision.aclose()
 

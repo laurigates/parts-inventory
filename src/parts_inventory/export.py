@@ -1,4 +1,4 @@
-"""Generate the committed, agent-readable inventory exports from the DB.
+"""Generate the agent-readable inventory exports from the DB.
 
 `inventory.md` is grouped and human/agent-friendly; `inventory.csv` is flat for
 programmatic use. Both are regenerated wholesale — never hand-edited.

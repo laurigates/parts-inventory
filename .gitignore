@@ -1,4 +1,5 @@
-# Canonical DB is generated/local; exports/ are the committed source of truth
+# Inventory data lives in the data dir (ADR-002), never in the repo. These
+# patterns guard against a stray PARTS_INVENTORY_DATA=. or the pre-ADR-002 layout.
 inventory.db
 inventory.db-shm
 inventory.db-wal
@@ -10,9 +11,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
-# Captured reference images are large/local; keep dir tracked via .gitkeep
-images/*
-!images/.gitkeep
+exports/
+images/
 
 # Secrets
 .env
