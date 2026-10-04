@@ -1,0 +1,8 @@
+title = "parts-inventory gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Lockfile hashes are not secrets"
+paths = ['''uv\.lock''']
