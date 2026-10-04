@@ -8,7 +8,7 @@ without a rigid column-per-property schema.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 

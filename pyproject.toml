@@ -16,13 +16,15 @@ parts-inventory = "parts_inventory.cli:main"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.2",
     "pytest>=9.1.0",
     "pytest-asyncio>=1.4.0",
-    "ruff>=0.6.0",
+    "ruff>=0.16",
+    "ty>=0.0.84",
 ]
 
 [build-system]
-requires = ["uv_build>=0.11,<0.12"]
+requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -32,3 +34,9 @@ module-root = "src"
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

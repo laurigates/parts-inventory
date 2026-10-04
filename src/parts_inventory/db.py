@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import sqlite3
 import struct
-from pathlib import Path
 from collections.abc import Iterator
+from pathlib import Path
 
 import sqlite_vec
 
@@ -95,7 +95,9 @@ class Inventory:
             """,
             row,
         )
-        item_id = int(cur.lastrowid)
+        item_id = cur.lastrowid
+        if item_id is None:
+            raise RuntimeError("INSERT INTO items returned no rowid")
         if embedding is not None:
             self.conn.execute(
                 "INSERT INTO item_embeddings (item_id, embedding) VALUES (?, ?)",
