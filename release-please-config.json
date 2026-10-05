@@ -3,7 +3,14 @@
   "release-type": "python",
   "packages": {
     ".": {
-      "package-name": "parts-inventory"
+      "package-name": "parts-inventory",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='parts-inventory')].version"
+        }
+      ]
     }
   },
   "changelog-sections": [
