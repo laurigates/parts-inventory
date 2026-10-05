@@ -20,6 +20,11 @@
   },
   "packageRules": [
     {
+      "description": "requires-python is a supported-version floor, not a dependency to pin: the pin rangeStrategy turned >=3.13 into ==3.14.8",
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
+    },
+    {
       "description": "Require approval for major updates",
       "matchUpdateTypes": ["major"],
       "dependencyDashboardApproval": true
